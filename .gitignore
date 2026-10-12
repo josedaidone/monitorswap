@@ -1,0 +1,7 @@
+# build output
+/dist/
+*.exe
+
+# files the app writes next to itself
+monitorswap.log
+/settings.json
