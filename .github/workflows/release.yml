@@ -1,10 +1,13 @@
-# Pushing a tag like v0.1.0 runs the tests, builds MonitorSwap.exe from this
-# source and attaches MonitorSwap.zip to a GitHub release of the same name.
+# Changing the VERSION file on main publishes a release: the tests run,
+# MonitorSwap.exe is built from this source, and MonitorSwap.zip is attached
+# to a new GitHub release tagged v<VERSION>.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,17 +15,31 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      - name: Read version
+        id: v
+        run: |
+          tag="v$(tr -d '[:space:]' < VERSION)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-go@v5
+        if: steps.v.outputs.exists != 'true'
         with:
           go-version: stable
       - name: Test, build and package
+        if: steps.v.outputs.exists != 'true'
         run: ./package.sh
       - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: steps.v.outputs.exists != 'true'
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/MonitorSwap.zip \
-            --title "MonitorSwap ${GITHUB_REF_NAME#v}" \
+          tag="${{ steps.v.outputs.tag }}"
+          gh release create "$tag" dist/MonitorSwap.zip \
+            --target "$GITHUB_SHA" \
+            --title "MonitorSwap ${tag#v}" \
             --notes-file packaging/RELEASE_NOTES.md
